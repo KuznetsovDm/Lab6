@@ -132,6 +132,7 @@ int main(int argc, char **argv) {
   uint64_t step = k / servers_num;
   uint64_t start = 1;
   
+  int sck[1000];
   for (int i = 0; i < servers_num; i++) {
     struct hostent *hostname = gethostbyname(to[i].ip);
     if (hostname == NULL) {
@@ -144,13 +145,13 @@ int main(int argc, char **argv) {
     server.sin_port = htons(to[i].port);
     server.sin_addr.s_addr = *((unsigned long *)hostname->h_addr);
 
-    int sck = socket(AF_INET, SOCK_STREAM, 0);
-    if (sck < 0) {
+    sck[i] = socket(AF_INET, SOCK_STREAM, 0);
+    if (sck[i] < 0) {
       fprintf(stderr, "Socket creation failed!\n");
       exit(1);
     }
 
-    if (connect(sck, (struct sockaddr *)&server, sizeof(server)) < 0) {
+    if (connect(sck[i], (struct sockaddr *)&server, sizeof(server)) < 0) {
       fprintf(stderr, "Connection failed\n");
       exit(1);
     }
@@ -160,28 +161,31 @@ int main(int argc, char **argv) {
     uint64_t begin = start;
     uint64_t end = start + step;
     start += step;
-    
-    if (end > k)
-        end = k;
-        
-    if (begin == end)
-        begin = end = 0;
-    
-    if (begin > k)
-        begin = end = 0;
+    if (end > k) end = k;
+    if (begin == end) begin = end = 0;
+    if (begin > k) begin = end = 0;
 
     char task[sizeof(uint64_t) * 3];
     memcpy(task, &begin, sizeof(uint64_t));
     memcpy(task + sizeof(uint64_t), &end, sizeof(uint64_t));
     memcpy(task + 2 * sizeof(uint64_t), &mod, sizeof(uint64_t));
 
-    if (send(sck, task, sizeof(task), 0) < 0) {
+    if (send(sck[i], task, sizeof(task), 0) < 0) {
       fprintf(stderr, "Send failed\n");
       exit(1);
     }
+  }
+  start = 1;
+  for (int i = 0; i < servers_num; i++) {
+    uint64_t begin = start;
+    uint64_t end = start + step;
+    start += step;
+    if (end > k) end = k;
+    if (begin == end) begin = end = 0;
+    if (begin > k) begin = end = 0;
 
     char response[sizeof(uint64_t)];
-    if (recv(sck, response, sizeof(response), 0) < 0) {
+    if (recv(sck[i], response, sizeof(response), 0) < 0) {
       fprintf(stderr, "Recieve failed\n");
       exit(1);
     }
@@ -194,7 +198,7 @@ int main(int argc, char **argv) {
     if (answer > 0)
         ans = MultModulo(ans, answer, mod);
 
-    close(sck);
+    close(sck[i]);
   }
   printf("answer: %llu\n", ans);
   free(to);
